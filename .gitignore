@@ -1,4 +1,7 @@
 .idea/
-/vendor/
-/.vscode/
-/.ppm/
+.ppm/
+.vscode/
+vendor/
+composer.lock
+phpunit.xml
+

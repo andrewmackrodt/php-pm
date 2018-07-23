@@ -2,7 +2,7 @@
 
 namespace PHPPM;
 
-use React\Socket\ConnectionInterface;
+use PHPPM\Interop\Socket\ConnectionInterface;
 
 /**
  * Little trait used in ProcessManager and ProcessSlave to have a simple json process communication.

@@ -2,10 +2,10 @@
 
 namespace PHPPM;
 
-use React\EventLoop\Factory;
-use React\EventLoop\LoopInterface;
-use React\Socket\ConnectionInterface;
-use React\Socket\UnixConnector;
+use PHPPM\Interop\EventLoop\Factory;
+use PHPPM\Interop\EventLoop\LoopInterface;
+use PHPPM\Interop\Socket\ConnectionInterface;
+use PHPPM\Interop\Socket\UnixConnectorFactory;
 
 class ProcessClient
 {
@@ -28,7 +28,7 @@ class ProcessClient
             'options' => $options
         ];
 
-        $connector = new UnixConnector($this->loop);
+        $connector = UnixConnectorFactory::create($this->loop);
         $unixSocket = $this->getControllerSocketPath(false);
 
         $connector->connect($unixSocket)->done(

@@ -2,7 +2,7 @@
 
 namespace PHPPM;
 
-use React\Socket\ConnectionInterface;
+use PHPPM\Interop\Socket\ConnectionInterface;
 
 /**
  * SlavePool singleton is responsible for maintaining a pool of slave instances
@@ -95,7 +95,7 @@ class SlavePool
      */
     public function getByStatus($status)
     {
-        return array_filter($this->slaves, function ($slave) use ($status) {
+        return array_filter($this->slaves, function (Slave $slave) use ($status) {
             return $status === Slave::ANY || $status === $slave->getStatus();
         });
     }

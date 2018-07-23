@@ -2,8 +2,8 @@
 
 namespace PHPPM;
 
-use React\Socket\ConnectionInterface;
-use React\ChildProcess\Process;
+use PHPPM\Interop\ChildProcess\ProcessInterface;
+use PHPPM\Interop\Socket\ConnectionInterface;
 
 class Slave
 {
@@ -40,6 +40,9 @@ class Slave
      */
     private $port;
 
+    /**
+     * @var ProcessInterface
+     */
     private $process;
     private $pid;
     private $connection; // slave incoming
@@ -85,9 +88,9 @@ class Slave
     /**
      * Attach a slave to a running process
      *
-     * @param Process $process
+     * @param ProcessInterface $process
      */
-    public function attach(Process $process)
+    public function attach(ProcessInterface $process)
     {
         $this->process = $process;
     }
@@ -228,7 +231,7 @@ class Slave
     /**
      * Get slave process
      *
-     * @return Process slave process
+     * @return ProcessInterface slave process
      */
     public function getProcess()
     {

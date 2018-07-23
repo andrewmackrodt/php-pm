@@ -2,10 +2,9 @@
 
 namespace PHPPM;
 
-use React\EventLoop\LoopInterface;
-use React\Socket\UnixConnector;
-use React\Socket\TimeoutConnector;
-use React\Socket\ConnectionInterface;
+use PHPPM\Interop\EventLoop\LoopInterface;
+use PHPPM\Interop\Socket\TimeoutConnectorFactory;
+use PHPPM\Interop\Socket\ConnectionInterface;
 use Symfony\Component\Console\Output\OutputInterface;
 
 class RequestHandler
@@ -163,8 +162,7 @@ class RequestHandler
         // mark slave as busy
         $this->slave->occupy();
 
-        $connector = new UnixConnector($this->loop);
-        $connector = new TimeoutConnector($connector, $this->timeout, $this->loop);
+        $connector = TimeoutConnectorFactory::create($this->loop, $this->timeout);
 
         $socketPath = $this->getSlaveSocketPath($this->slave->getPort());
         $connector->connect($socketPath)->then(

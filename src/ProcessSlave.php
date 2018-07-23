@@ -6,18 +6,20 @@ namespace PHPPM;
 use Evenement\EventEmitterInterface;
 use PHPPM\Bridges\BridgeInterface;
 use PHPPM\Debug\BufferingLogger;
+use PHPPM\Interop\Http\ResponseFactory;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
-use React\EventLoop\Factory;
-use React\EventLoop\LoopInterface;
-use React\Http\Response;
-use React\Http\Server as HttpServer;
-use React\Promise\Promise;
-use React\Socket\ConnectionInterface;
-use React\Socket\ServerInterface;
-use React\Socket\UnixConnector;
-use React\Socket\UnixServer;
-use React\Stream\ReadableResourceStream;
+use PHPPM\Interop\EventLoop\Factory;
+use PHPPM\Interop\EventLoop\LoopInterface;
+use RingCentral\Psr7\Response;
+use PHPPM\Interop\Http\ServerFactory as HttpServerFactory;
+use PHPPM\Interop\Promise\PromiseFactory;
+use PHPPM\Interop\Promise\PromiseInterface;
+use PHPPM\Interop\Socket\ConnectionInterface;
+use PHPPM\Interop\Socket\ServerInterface;
+use PHPPM\Interop\Socket\UnixConnectorFactory;
+use PHPPM\Interop\Socket\UnixServerFactory;
+use PHPPM\Interop\Stream\ReadableResourceStreamFactory;
 use Symfony\Component\Debug\ErrorHandler;
 
 class ProcessSlave
@@ -291,7 +293,7 @@ class ProcessSlave
      */
     private function doConnect()
     {
-        $connector = new UnixConnector($this->loop);
+        $connector = UnixConnectorFactory::create($this->loop);
         $unixSocket = $this->getControllerSocketPath(false);
 
         $connector->connect($unixSocket)->done(
@@ -308,9 +310,9 @@ class ProcessSlave
                 // port is the slave identifier
                 $port = $this->config['port'];
                 $socketPath = $this->getSlaveSocketPath($port, true);
-                $this->server = new UnixServer($socketPath, $this->loop);
+                $this->server = UnixServerFactory::create($socketPath, $this->loop);
 
-                $httpServer = new HttpServer([$this, 'onRequest']);
+                $httpServer = HttpServerFactory::create([$this, 'onRequest'], $this->loop);
                 $httpServer->listen($this->server);
 
                 $this->sendMessage($this->controller, 'register', ['pid' => getmypid(), 'port' => $port]);
@@ -360,7 +362,7 @@ class ProcessSlave
      *
      * @param ServerRequestInterface $request
      *
-     * @return ResponseInterface|Promise
+     * @return ResponseInterface|PromiseInterface
      * @throws \Exception
      */
     public function onRequest(ServerRequestInterface $request)
@@ -395,9 +397,9 @@ class ProcessSlave
             $response = $catchLog($e);
         }
 
-        $promise = new Promise(function ($resolve) use ($response) {
+        $promise = PromiseFactory::create(function ($resolve) use ($response) {
             return $resolve($response);
-        });
+        }, $this->loop);
 
         $promise = $promise->then(function (ResponseInterface $response) use ($request, $logTime, $remoteIp) {
             if ($this->isLogging()) {
@@ -514,17 +516,20 @@ class ProcessSlave
                 }
             }
 
+            $status = 200;
             $expires = 3600; //1 h
-            $response = new Response(200, [
+            $headers = [
                 'Content-Type' => $this->mimeContentType($filePath),
                 'Content-Length' => filesize($filePath),
                 'Pragma' => 'public',
                 'Cache-Control' => 'max-age=' . $expires,
                 'Last-Modified' => gmdate('D, d M Y H:i:s', $mTime) . ' GMT',
-                'Expires' => gmdate('D, d M Y H:i:s', time() + $expires) . ' GMT'
-            ], new ReadableResourceStream(fopen($filePath, 'rb'), $this->loop));
+                'Expires' => gmdate('D, d M Y H:i:s', time() + $expires) . ' GMT',
+            ];
 
-            return $response;
+            $body = ReadableResourceStreamFactory::create($filePath, $this->loop);
+
+            return ResponseFactory::create($this->loop, $status, $headers, $body);
         }
         return false;
     }

@@ -3,15 +3,16 @@ declare(ticks = 1);
 
 namespace PHPPM;
 
-use React\EventLoop\Factory;
-use React\EventLoop\LoopInterface;
-use React\EventLoop\TimerInterface;
-use React\Socket\Server;
-use React\Socket\UnixServer;
-use React\Socket\Connection;
-use React\Socket\ServerInterface;
-use React\Socket\ConnectionInterface;
-use React\ChildProcess\Process;
+use PHPPM\Interop\ChildProcess\ProcessInterface;
+use PHPPM\Interop\EventLoop\Factory;
+use PHPPM\Interop\EventLoop\LoopInterface;
+use PHPPM\Interop\EventLoop\TimerInterface;
+use PHPPM\Interop\Socket\ConnectionTransformer;
+use PHPPM\Interop\Socket\ServerFactory;
+use PHPPM\Interop\Socket\ConnectionInterface;
+use PHPPM\Interop\Socket\ServerInterface;
+use PHPPM\Interop\ChildProcess\ProcessFactory;
+use PHPPM\Interop\Socket\UnixServerFactory;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Debug\Debug;
 use Symfony\Component\Process\ProcessUtils;
@@ -21,7 +22,7 @@ class ProcessManager
     use ProcessCommunicationTrait;
 
     /*
-     * Load balander started, waiting for slaves to come up
+     * Load balancer started, waiting for slaves to come up
      */
     const STATE_STARTING = 0;
 
@@ -248,7 +249,7 @@ class ProcessManager
             // if for some reason there are no workers, the close callback won't do anything, so just quit.
             $this->quit();
         } else {
-            $this->closeSlaves($graceful, function ($slave) use (&$remainingSlaves) {
+            $this->closeSlaves($graceful, function (Slave $slave) use (&$remainingSlaves) {
                 $this->terminateSlave($slave);
                 $remainingSlaves--;
 
@@ -463,11 +464,15 @@ class ProcessManager
         ob_implicit_flush(1);
 
         $this->loop = Factory::create();
-        $this->controller = new UnixServer($this->getControllerSocketPath(), $this->loop);
-        $this->controller->on('connection', [$this, 'onSlaveConnection']);
+        $this->controller = UnixServerFactory::create($this->getControllerSocketPath(), $this->loop);
+        $this->controller->on('connection', function ($connection) {
+            $this->onSlaveConnection(ConnectionTransformer::transform($connection));
+        });
 
-        $this->web = new Server(sprintf('%s:%d', $this->host, $this->port), $this->loop);
-        $this->web->on('connection', [$this, 'onRequest']);
+        $this->web = ServerFactory::create($this->host, $this->port, $this->loop);
+        $this->web->on('connection', function ($connection) {
+            $this->onRequest(ConnectionTransformer::transform($connection));
+        });
 
         $this->loop->addSignal(SIGTERM, [$this, 'shutdown']);
         $this->loop->addSignal(SIGINT, [$this, 'shutdown']);
@@ -508,7 +513,7 @@ class ProcessManager
     /**
      * Handles incoming connections from $this->port. Basically redirects to a slave.
      *
-     * @param Connection $incoming incoming connection from react
+     * @param ConnectionInterface $incoming incoming connection from react
      */
     public function onRequest(ConnectionInterface $incoming)
     {
@@ -1176,14 +1181,14 @@ EOF;
         }
 
         // use exec to omit wrapping shell
-        $process = new Process($commandline);
+        $process = ProcessFactory::create($commandline, $this->loop);
 
         $slave = new Slave($port, $this->maxRequests, $this->ttl);
         $slave->attach($process);
         $this->slaves->add($slave);
 
-        $process->start($this->loop);
-        $process->stderr->on(
+        $process->start();
+        $process->stderr()->on(
             'data',
             function ($data) use ($port) {
                 if ($this->lastWorkerErrorPrintBy !== $port) {
@@ -1208,7 +1213,7 @@ EOF;
         } catch (\Exception $ignored) {
         }
 
-        /** @var Process */
+        /** @var ProcessInterface $process */
         $process = $slave->getProcess();
         if ($process->isRunning()) {
             $process->terminate();
